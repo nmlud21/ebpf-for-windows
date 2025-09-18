@@ -8,6 +8,7 @@
 #pragma warning(pop)
 #include "capture_helper.hpp"
 #include "catch_wrapper.hpp"
+#include "ebpf_execution_type.h"
 #include "ebpf_platform.h"
 #include "ebpf_vm_isa.hpp"
 #include "helpers.h"
@@ -117,7 +118,37 @@ ebpf_test_tail_call(_In_z_ const char* filename, uint32_t expected_result)
 }
 
 #if !defined(CONFIG_BPF_JIT_DISABLED)
-void test_libbpf_load_program()
+TEST_CASE("good_tail_call-jit", "[libbpf]")
+{
+    // Verify that 42 is returned, which is done by the callee.
+    ebpf_test_tail_call("tail_call.o", 42);
+}
+
+TEST_CASE("bad_tail_call-jit", "[libbpf]")
+{
+    ebpf_test_tail_call("tail_call_bad.o", (uint32_t)(-EBPF_INVALID_ARGUMENT));
+}
+#endif
+
+#if !defined(CONFIG_BPF_JIT_DISABLED)
+void
+test_invalid_bpf_action(char log_buffer[])
+{
+    REQUIRE(errno == EACCES);
+    REQUIRE(strcmp(log_buffer, "0: Invalid type (r0.type == number)\n\n") == 0);
+}
+#else
+void
+test_invalid_bpf_action(char log_buffer[])
+{
+    UNREFERENCED_PARAMETER(log_buffer);
+    REQUIRE(errno == ENOTSUP);
+}
+#endif
+
+#if !defined(CONFIG_BPF_JIT_DISABLED)
+static void
+test_libbpf_load_program()
 {
     _test_helper_libbpf test_helper;
     test_helper.initialize();
@@ -138,7 +169,7 @@ TEST_CASE("libbpf load program", "[libbpf][deprecated]")
     test_libbpf_load_program();
 }
 
-void
+static void
 test_libbpf_prog_test_run()
 {
     _test_helper_libbpf test_helper;
@@ -229,23 +260,7 @@ TEST_CASE("libbpf prog test run", "[libbpf][deprecated]")
 #endif
 
 #if !defined(CONFIG_BPF_JIT_DISABLED)
-void
-test_invalid_bpf_action(char log_buffer[])
-{
-    REQUIRE(errno == EACCES);
-    REQUIRE(strcmp(log_buffer, "0: Invalid type (r0.type == number)\n\n") == 0);
-}
-#else
-void
-test_invalid_bpf_action(char log_buffer[])
-{
-    UNREFERENCED_PARAMETER(log_buffer);
-    REQUIRE(errno == ENOTSUP);
-}
-#endif
-
-#if !defined(CONFIG_BPF_JIT_DISABLED)
-void
+static void
 test_valid_bpf_load_program()
 {
     _test_helper_libbpf test_helper;
@@ -276,7 +291,7 @@ test_valid_bpf_load_program()
     Platform::_close(program_fd);
 }
 
-void
+static void
 test_valid_bpf_prog_load() 
 {
     _test_helper_libbpf test_helper;
@@ -307,7 +322,7 @@ test_valid_bpf_prog_load()
     Platform::_close(program_fd);
 }
 
-void
+static void
 test_valid_bpf_load_program_xattr()
 {
     _test_helper_libbpf test_helper;
@@ -350,7 +365,7 @@ TEST_CASE("valid bpf_load_program", "[libbpf][deprecated]")
 
 TEST_CASE("valid bpf_prog_load", "[libbpf]")
 {
-    test_valid_bpf_load_program();
+    test_valid_bpf_prog_load();
 }
 
 TEST_CASE("valid bpf_load_program_xattr", "[libbpf][deprecated]")
@@ -377,7 +392,7 @@ TEST_CASE("valid bpf_load_program_xattr", "[libbpf][deprecated]")
 #define BPF_ADD 0
 
 #if !defined(CONFIG_BPF_JIT_DISABLED)
-void
+static void
 test_valid_bpf_load_program_with_map()
 {
     _test_helper_libbpf test_helper;
@@ -426,20 +441,23 @@ TEST_CASE("valid bpf_load_program with map", "[libbpf][deprecated]")
 {
     test_valid_bpf_load_program_with_map();
 }
+#endif
 
-void
-test_libbpf_program()
+static void
+test_libbpf_program(ebpf_execution_type_t execution_type)
 {
     _test_helper_libbpf test_helper;
     test_helper.initialize();
 
-    struct bpf_object* object = bpf_object__open("test_sample_ebpf.o");
+    const char* file_name =
+        (execution_type == EBPF_EXECUTION_NATIVE ? "test_sample_ebpf_um.dll" : "test_sample_ebpf.o");
+    struct bpf_object* object = bpf_object__open(file_name);
     REQUIRE(object != nullptr);
     // Load the program(s).
     REQUIRE(bpf_object__load(object) == 0);
 
     const char* name = bpf_object__name(object);
-    REQUIRE(strcmp(name, "test_sample_ebpf.o") == 0);
+    REQUIRE(strcmp(name, file_name) == 0);
 
     struct bpf_program* program = bpf_object__find_program_by_name(object, "test_program_entry");
     REQUIRE(program != nullptr);
@@ -463,6 +481,7 @@ test_libbpf_program()
     REQUIRE(fd2 != ebpf_fd_invalid);
 
     size_t size = bpf_program__insn_cnt(program);
+    INFO("Size: " << size);
     REQUIRE(size == 40);
 
 #pragma warning(suppress : 4996) // deprecated
@@ -477,18 +496,21 @@ test_libbpf_program()
     bpf_object__close(object);
 }
 
-TEST_CASE("libbpf program", "[libbpf]")
-{
-    test_libbpf_program();
-}
+// TEST_CASE("libbpf program", "[libbpf]")
+// {
+//     test_libbpf_program();
+// }
+DECLARE_ALL_TEST_CASES("libbpf program", "[libbpf]", test_libbpf_program);
 
-void
-test_libbpf_subprogram()
+static void
+test_libbpf_subprogram(ebpf_execution_type_t execution_type)
 {
     _test_helper_libbpf test_helper;
     test_helper.initialize();
 
-    struct bpf_object* object = bpf_object__open("bindmonitor_bpf2bpf.o");
+    const char* file_name =
+        (execution_type == EBPF_EXECUTION_NATIVE ? "bindmonitor_bpf2bpf_um.dll" : "bindmonitor_bpf2bpf.o");
+    struct bpf_object* object = bpf_object__open(file_name);
     REQUIRE(object != nullptr);
 
     // Test bpf_object__find_program_by_name().
@@ -511,10 +533,11 @@ test_libbpf_subprogram()
     bpf_object__close(object);
 }
 
-TEST_CASE("libbpf subprogram", "[libbpf]")
-{
-    test_libbpf_subprogram();
-}
+// TEST_CASE("libbpf subprogram", "[libbpf]")
+// {
+//     test_libbpf_subprogram();
+// }
+DECLARE_ALL_TEST_CASES("libbpf subprogram", "[libbpf]", test_libbpf_subprogram);
 
 static void
 _test_program_autoload(ebpf_execution_type_t execution_type)
@@ -574,7 +597,8 @@ _test_program_autoload(ebpf_execution_type_t execution_type)
 
 DECLARE_ALL_TEST_CASES("libbpf program autoload", "[libbpf]", _test_program_autoload);
 
-void
+#if !defined(CONFIG_BPF_JIT_DISABLED)
+static void
 test_libbpf_program_pinning()
 {
     _test_helper_libbpf test_helper;
@@ -650,7 +674,7 @@ TEST_CASE("libbpf program pinning", "[libbpf]")
     test_libbpf_program_pinning();
 }
 
-void
+static void
 test_libbpf_program_attach()
 {
     _test_helper_libbpf test_helper;
@@ -703,7 +727,7 @@ TEST_CASE("libbpf program attach", "[libbpf]")
 }
 #endif
 
-void
+static void
 test_xdp_ifindex(uint32_t ifindex, int program_fd[2], bpf_prog_info program_info[2])
 {
     // Verify there's no program attached to the specified ifindex.
@@ -730,7 +754,7 @@ test_xdp_ifindex(uint32_t ifindex, int program_fd[2], bpf_prog_info program_info
 }
 
 #if !defined(CONFIG_BPF_JIT_DISABLED)
-void
+static void
 test_bpf_set_link_xdp_fd()
 {
     _test_helper_libbpf test_helper;
@@ -767,7 +791,7 @@ TEST_CASE("bpf_set_link_xdp_fd", "[libbpf]")
    test_bpf_set_link_xdp_fd();
 }
 
-void
+static void
 test_libbpf_map()
 {
     _test_helper_libbpf test_helper;
@@ -1016,232 +1040,9 @@ TEST_CASE("libbpf map", "[libbpf]")
 {
     test_libbpf_map();
 }
+#endif
 
-void
-test_libbpf_map_binding()
-{
-    _test_helper_libbpf test_helper;
-    test_helper.initialize();
-
-    struct bpf_object* object = bpf_object__open("test_sample_ebpf.o");
-    REQUIRE(object != nullptr);
-
-    // Load the program(s).
-    REQUIRE(bpf_object__load(object) == 0);
-
-    struct bpf_program* program = bpf_object__next_program(object, nullptr);
-    REQUIRE(program != nullptr);
-    int program_fd = bpf_program__fd(const_cast<const bpf_program*>(program));
-
-    // Create a map.
-    int map_fd = bpf_map_create(BPF_MAP_TYPE_ARRAY, nullptr, sizeof(uint32_t), sizeof(uint32_t), 2, nullptr);
-    REQUIRE(map_fd > 0);
-    bpf_map_info info;
-    uint32_t info_size = sizeof(info);
-    REQUIRE(bpf_obj_get_info_by_fd(map_fd, &info, &info_size) == 0);
-    ebpf_id_t map_id = info.id;
-
-    // Try some invalid FDs.
-    int error = bpf_prog_bind_map(ebpf_fd_invalid, map_fd, nullptr);
-    REQUIRE(error < 0);
-    REQUIRE(errno == EBADF);
-
-    error = bpf_prog_bind_map(map_fd, map_fd, nullptr);
-    REQUIRE(error < 0);
-    REQUIRE(errno == EINVAL);
-
-    error = bpf_prog_bind_map(program_fd, ebpf_fd_invalid, nullptr);
-    REQUIRE(error < 0);
-    REQUIRE(errno == EBADF);
-
-    error = bpf_prog_bind_map(program_fd, program_fd, nullptr);
-    REQUIRE(error < 0);
-    REQUIRE(errno == EINVAL);
-
-    // Bind it to the program.
-    error = bpf_prog_bind_map(program_fd, map_fd, nullptr);
-    REQUIRE(error == 0);
-
-    // Release our own reference on the map.
-    Platform::_close(map_fd);
-
-    // Verify that the map still exists.
-    map_fd = bpf_map_get_fd_by_id(map_id);
-    REQUIRE(map_fd > 0);
-    Platform::_close(map_fd);
-
-    // Close the object, which should cause the map to be deleted.
-    bpf_object__close(object);
-    REQUIRE(bpf_map_get_fd_by_id(map_id) < 0);
-}
-
-TEST_CASE("libbpf map binding", "[libbpf]")
-{
-    test_libbpf_map_binding();
-}
-
-void
-test_libbpf_map_pinning()
-{
-    _test_helper_libbpf test_helper;
-    test_helper.initialize();
-    const char* pin_path = "\\temp\\test";
-
-    struct bpf_object* object = bpf_object__open("test_sample_ebpf.o");
-    REQUIRE(object != nullptr);
-
-    // Load the program(s).
-    REQUIRE(bpf_object__load(object) == 0);
-
-    struct bpf_map* map = bpf_object__next_map(object, nullptr);
-    REQUIRE(map != nullptr);
-
-    REQUIRE(bpf_map__is_pinned(map) == false);
-
-    // Try to pin the map.
-    int result = bpf_map__pin(map, pin_path);
-    REQUIRE(result == 0);
-
-    REQUIRE(bpf_map__is_pinned(map) == true);
-
-    // Make sure a duplicate pin fails.
-    result = bpf_map__pin(map, pin_path);
-    REQUIRE(result < 0);
-    REQUIRE(errno == EEXIST);
-
-    result = bpf_map__unpin(map, pin_path);
-    REQUIRE(result == 0);
-
-    REQUIRE(bpf_map__is_pinned(map) == false);
-
-    // Make sure pinning with a different name fails.
-    result = bpf_map__pin(map, "second_pin_path");
-    REQUIRE(result < 0);
-    REQUIRE(errno == EINVAL);
-
-    // Make sure an invalid path fails.
-    result = bpf_map__unpin(map, NULL);
-    REQUIRE(result < 0);
-    REQUIRE(errno == ENOENT);
-
-    // Make sure a duplicate unpin fails.
-    result = bpf_map__unpin(map, pin_path);
-    REQUIRE(result < 0);
-    REQUIRE(errno == ENOENT);
-
-    // Clear pin path for the map.
-    result = bpf_map__set_pin_path(map, nullptr);
-    REQUIRE(result == 0);
-
-    // Set pin path for the map.
-    result = bpf_map__set_pin_path(map, pin_path);
-    REQUIRE(result == 0);
-
-    // Clear pin path for the map.
-    result = bpf_map__set_pin_path(map, nullptr);
-    REQUIRE(result == 0);
-
-    // Try to pin all (1) maps in the object.
-    result = bpf_object__pin_maps(object, pin_path);
-    REQUIRE(result == 0);
-
-    REQUIRE(bpf_map__is_pinned(map) == true);
-
-    // Make sure a duplicate pin fails.
-    result = bpf_object__pin_maps(object, pin_path);
-    REQUIRE(result < 0);
-    REQUIRE(errno == EEXIST);
-
-    result = bpf_object__unpin_maps(object, pin_path);
-    REQUIRE(result == 0);
-
-    REQUIRE(bpf_map__is_pinned(map) == false);
-
-    // Try to pin all programs and maps in the object.
-    result = bpf_object__pin(object, pin_path);
-    REQUIRE(result == 0);
-
-    REQUIRE(bpf_map__is_pinned(map) == true);
-
-    // Make sure a duplicate pin fails.
-    result = bpf_object__pin_maps(object, pin_path);
-    REQUIRE(result < 0);
-    REQUIRE(errno == EEXIST);
-
-    // There is no bpf_object__unpin API, so
-    // we have to unpin programs and maps separately.
-    result = bpf_object__unpin_programs(object, pin_path);
-    REQUIRE(result == 0);
-
-    result = bpf_object__unpin_maps(object, pin_path);
-    REQUIRE(result == 0);
-
-    REQUIRE(bpf_map__is_pinned(map) == false);
-
-    bpf_object__close(object);
-}
-
-TEST_CASE("libbpf map pinning", "[libbpf]")
-{
-    test_libbpf_map_pinning();
-}
-
-void
-test_libbpf_obj_pinning()
-{
-    _test_helper_libbpf test_helper;
-    test_helper.initialize();
-    const char* pin_path = "\\temp\\test";
-
-    struct bpf_object* object = bpf_object__open("test_sample_ebpf.o");
-    REQUIRE(object != nullptr);
-
-    // Load the program(s).
-    REQUIRE(bpf_object__load(object) == 0);
-
-    struct bpf_map* map = bpf_object__next_map(object, nullptr);
-    REQUIRE(map != nullptr);
-
-    int map_fd = bpf_map__fd(map);
-    REQUIRE(map_fd > 0);
-
-    int result = bpf_obj_pin(map_fd, pin_path);
-    REQUIRE(result == 0);
-
-    // Linux lacks a bpf_object_unpin, so call the ebpf_ variety.
-    REQUIRE(ebpf_object_unpin(pin_path) == EBPF_SUCCESS);
-
-    result = bpf_obj_pin(-1, "invalid_fd");
-    REQUIRE(result < 0);
-    REQUIRE(errno == EINVAL);
-
-    result = bpf_obj_pin(map_fd, NULL);
-    REQUIRE(result < 0);
-    REQUIRE(errno == EINVAL);
-
-    result = bpf_obj_pin(nonexistent_fd, "not_a_real_fd");
-    REQUIRE(result < 0);
-    REQUIRE(errno == EBADF);
-
-    bpf_object__close(object);
-}
-
-TEST_CASE("libbpf obj pinning", "[libbpf]")
-{
-   test_libbpf_obj_pinning();
-}
-
-TEST_CASE("good_tail_call-jit", "[libbpf]")
-{
-    // Verify that 42 is returned, which is done by the callee.
-    ebpf_test_tail_call("tail_call.o", 42);
-}
-
-TEST_CASE("bad_tail_call-jit", "[libbpf]")
-{
-    ebpf_test_tail_call("tail_call_bad.o", (uint32_t)(-EBPF_INVALID_ARGUMENT));
-}
-
+#if !defined(CONFIG_BPF_JIT_DISABLED)
 void
 test_disallow_prog_array_mixed_program_type_values()
 {
