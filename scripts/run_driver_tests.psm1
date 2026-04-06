@@ -348,6 +348,7 @@ function Invoke-CICDTests
 
     Push-Location $WorkingDirectory
     $env:EBPF_ENABLE_WER_REPORT = "yes"
+    $env:EBPF_SIGNED_DRIVERS_EXPECTED = if (Test-Path "C:\eBPF") { "true" } else { "false" }
 
     # Now create an array of test tuples, overriding only the necessary values
     # load_native_program_invalid4 has been deleted from the test list, but 0.17 tests still have this test.
@@ -465,6 +466,7 @@ function Invoke-CICDStressTests
 
     Push-Location $WorkingDirectory
     $env:EBPF_ENABLE_WER_REPORT = "yes"
+    $env:EBPF_SIGNED_DRIVERS_EXPECTED = if (Test-Path "C:\eBPF") { "true" } else { "false" }
 
     if (-not $MultiThread) {
         Write-Log "Executing eBPF API IOCTL stress tests."

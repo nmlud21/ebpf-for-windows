@@ -3586,6 +3586,12 @@ TEST_CASE("ebpf_verification_memory_apis", "[ebpf_api]")
     ebpf_free_string(error_message);
 }
 
+/**
+ * @brief Set the proof of verification registry value to control whether production signature
+ * verification is required for native module loads.
+ *
+ * @param[in] enable Non-zero to require production signatures, zero to allow test-signed modules.
+ */
 static void
 _set_proof_of_verification(uint32_t enable)
 {
@@ -3620,22 +3626,24 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
     #error "Unsupported architecture"
     #endif
 
-    // This test requires a production-signed driver only available on 1ES runners.
-    // Detect 1ES runner via AGENT_ID, which Azure Pipelines agents always set (never set locally or on GitHub runners).
-    size_t agent_id_size = 0;
-    getenv_s(&agent_id_size, nullptr, 0, "AGENT_ID");
-    bool is_1es_runner = (agent_id_size > 0);
-    std::cout << "Checking for signed driver at: " << signed_driver_path << " (1ES runner: " << (is_1es_runner ? "yes" : "no") << ")" << std::endl;
+    // This test requires a production-signed driver copied to C:\eBPF by Setup.ps1 on 1ES runners.
+    // EBPF_SIGNED_DRIVERS_EXPECTED is set by run_driver_tests.psm1 when the signed driver directory exists.
+    size_t env_size = 0;
+    getenv_s(&env_size, nullptr, 0, "EBPF_SIGNED_DRIVERS_EXPECTED");
+    char env_value[16] = {};
+    if (env_size > 0 && env_size <= sizeof(env_value)) {
+        getenv_s(&env_size, env_value, sizeof(env_value), "EBPF_SIGNED_DRIVERS_EXPECTED");
+    }
+    bool signed_drivers_expected = (env_size > 0 && strcmp(env_value, "true") == 0);
     if (_access(signed_driver_path, 0) != 0) {
-        if (is_1es_runner) {
-            // On a 1ES runner the signed driver must exist.
-            FAIL("Signed driver not found at " << signed_driver_path << " on 1ES runner");
+        if (signed_drivers_expected) {
+            FAIL("Signed driver not found at " << signed_driver_path);
         }
-        SKIP("Signed driver not found at " << signed_driver_path << " (test requires 1ES runner)");
+        SKIP("Signed driver not found at " << signed_driver_path << " (only available on 1ES runners)");
     }
     std::cout << "Found signed driver file: " << signed_driver_path << std::endl;
 
-    // Enable proof of verification via registry.
+    // Require production signature verification for native module loads.
     _set_proof_of_verification(1);
 
     int result;
@@ -3651,7 +3659,7 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
     // RAII cleanup for the loaded object so it is freed even if assertions below fail.
     auto object_cleanup = std::unique_ptr<bpf_object, decltype(&bpf_object__close)>(object, bpf_object__close);
 
-    // Disable proof of verification via registry before any assertions that might fail.
+    // Restore default behavior (allow test-signed modules) before further assertions.
     _set_proof_of_verification(0);
     
     // Verify the program loaded correctly
@@ -3685,7 +3693,7 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
  */
 TEST_CASE("proof_of_verification_negative", "[native_tests][proof_of_verification]")
 {
-    // Enable proof of verification via registry.
+    // Require production signature verification for native module loads.
     _set_proof_of_verification(1);
 
     int result;
@@ -3704,7 +3712,7 @@ TEST_CASE("proof_of_verification_negative", "[native_tests][proof_of_verificatio
     }
     REQUIRE(result != 0);
 
-    // Disable proof of verification via registry.
+    // Restore default behavior (allow test-signed modules).
     _set_proof_of_verification(0);
 }
 #define OPERATION_SUCCESS 1
