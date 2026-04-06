@@ -11,7 +11,6 @@
 #include "common_tests.h"
 #include "ebpf_core_structs.h"
 #include "ebpf_ring_buffer_record.h"
-#include "ebpf_store_helper.h"
 #include "ebpf_structs.h"
 #include "misc_helper.h"
 #include "native_helper.hpp"
@@ -3587,6 +3586,19 @@ TEST_CASE("ebpf_verification_memory_apis", "[ebpf_api]")
     ebpf_free_string(error_message);
 }
 
+static void
+_set_proof_of_verification(uint32_t enable)
+{
+    HKEY key = nullptr;
+    LSTATUS status =
+        RegCreateKeyExW(HKEY_LOCAL_MACHINE, EBPF_PARAMETERS_REGISTRY_PATH, 0, nullptr, 0, KEY_WRITE, nullptr, &key, nullptr);
+    REQUIRE(status == ERROR_SUCCESS);
+    status = RegSetValueExW(
+        key, EBPF_PROOF_OF_VERIFICATION_REGISTRY_VALUE, 0, REG_DWORD, (const BYTE*)&enable, sizeof(enable));
+    RegCloseKey(key);
+    REQUIRE(status == ERROR_SUCCESS);
+}
+
 /**
  * @brief Test that validates production-signed native eBPF modules load successfully.
  *
@@ -3624,7 +3636,7 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
     std::cout << "Found signed driver file: " << signed_driver_path << std::endl;
 
     // Enable proof of verification via registry.
-    REQUIRE(ebpf_store_update_proof_of_verification(1) == EBPF_SUCCESS);
+    _set_proof_of_verification(1);
 
     int result;
     struct bpf_object* object = nullptr;
@@ -3640,7 +3652,7 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
     auto object_cleanup = std::unique_ptr<bpf_object, decltype(&bpf_object__close)>(object, bpf_object__close);
 
     // Disable proof of verification via registry before any assertions that might fail.
-    ebpf_store_update_proof_of_verification(0);
+    _set_proof_of_verification(0);
     
     // Verify the program loaded correctly
     uint32_t next_id;
@@ -3674,13 +3686,12 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
 TEST_CASE("proof_of_verification_negative", "[native_tests][proof_of_verification]")
 {
     // Enable proof of verification via registry.
-    REQUIRE(ebpf_store_update_proof_of_verification(1) == EBPF_SUCCESS);
+    _set_proof_of_verification(1);
 
     int result;
     struct bpf_object* object = nullptr;
     fd_t program_fd;
 
-    // Attempt to load the test-signed (non-production-signed) bindmonitor.sys
     result = program_load_helper("bindmonitor.sys", BPF_PROG_TYPE_BIND, EBPF_EXECUTION_NATIVE, &object, &program_fd);
 
     // The load should fail because the binary is not production-signed
@@ -3694,7 +3705,7 @@ TEST_CASE("proof_of_verification_negative", "[native_tests][proof_of_verificatio
     REQUIRE(result != 0);
 
     // Disable proof of verification via registry.
-    ebpf_store_update_proof_of_verification(0);
+    _set_proof_of_verification(0);
 }
 #define OPERATION_SUCCESS 1
 #define OPERATION_FAILURE 0
