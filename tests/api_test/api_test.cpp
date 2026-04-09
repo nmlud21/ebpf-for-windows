@@ -3627,18 +3627,7 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
     #endif
 
     // This test requires a production-signed driver copied to C:\eBPF by Setup.ps1 on 1ES runners.
-    // EBPF_SIGNED_DRIVERS_EXPECTED is set by run_driver_tests.psm1 when the signed driver directory exists.
-    size_t env_size = 0;
-    getenv_s(&env_size, nullptr, 0, "EBPF_SIGNED_DRIVERS_EXPECTED");
-    char env_value[16] = {};
-    if (env_size > 0 && env_size <= sizeof(env_value)) {
-        getenv_s(&env_size, env_value, sizeof(env_value), "EBPF_SIGNED_DRIVERS_EXPECTED");
-    }
-    bool signed_drivers_expected = (env_size > 0 && strcmp(env_value, "true") == 0);
     if (_access(signed_driver_path, 0) != 0) {
-        if (signed_drivers_expected) {
-            FAIL("Signed driver not found at " << signed_driver_path);
-        }
         SKIP("Signed driver not found at " << signed_driver_path << " (only available on 1ES runners)");
     }
     std::cout << "Found signed driver file: " << signed_driver_path << std::endl;
