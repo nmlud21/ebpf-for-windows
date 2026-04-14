@@ -40,7 +40,5 @@
 		<file src="..\..\scripts\ebpf_tracing.cmd" target="lib\native\bin"/>
 		<file src="..\..\scripts\ebpf_tracing_startup_task.xml" target="lib\native\bin"/>
 		<file src="..\..\scripts\ebpf_tracing_periodic_task.xml" target="lib\native\bin"/>
-		<!--eBPF sample programs -->
-		<file src="*.o" target="lib\native\samples"/>
 	</files>
 </package>
