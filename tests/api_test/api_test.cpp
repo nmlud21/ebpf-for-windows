@@ -64,6 +64,9 @@ CATCH_REGISTER_LISTENER(_api_test_watchdog)
 
 #define SAMPLE_PATH ""
 
+#define EBPF_PARAMETERS_REGISTRY_PATH L"Software\\eBPF\\Parameters"
+#define EBPF_PROOF_OF_VERIFICATION_REGISTRY_VALUE L"ProofOfVerification"
+
 #define EBPF_CORE_DRIVER_BINARY_NAME L"ebpfcore.sys"
 #define EBPF_CORE_DRIVER_NAME L"ebpfcore"
 

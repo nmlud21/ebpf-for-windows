@@ -612,6 +612,26 @@ _ebpf_extract_certificate_thumbprint(_In_ const CRYPT_PROVIDER_CERT* cert)
     return thumbprint_string;
 }
 
+static bool
+_ebpf_is_proof_of_verification_required()
+{
+    uint32_t proof_of_verification_value = 0;
+    ebpf_store_key_t parameters_key = nullptr;
+    ebpf_result_t reg_result = ebpf_open_registry_key(
+        ebpf_store_hklm_root_key,
+        EBPF_PARAMETERS_REGISTRY_PATH,
+        KEY_READ,
+        &parameters_key);
+    if (reg_result == EBPF_SUCCESS) {
+        (void)ebpf_read_registry_value_dword(
+            parameters_key,
+            EBPF_PROOF_OF_VERIFICATION_REGISTRY_VALUE,
+            &proof_of_verification_value);
+        ebpf_close_registry_key(parameters_key);
+    }
+    return proof_of_verification_value != 0;
+}
+
 _Must_inspect_result_ ebpf_result_t
 ebpf_verify_sys_file_signature(
     _In_z_ const wchar_t* file_name,
@@ -628,21 +648,7 @@ ebpf_verify_sys_file_signature(
     if (_ebpf_service_test_signing_enabled) {
         // Test signing is enabled, check the registry for proof of verification setting.
         // Read live from registry so tests can toggle it dynamically.
-        uint32_t proof_of_verification_value = 0;
-        ebpf_store_key_t parameters_key = nullptr;
-        ebpf_result_t reg_result = ebpf_open_registry_key(
-            ebpf_store_hklm_root_key,
-            EBPF_PARAMETERS_REGISTRY_PATH,
-            KEY_READ,
-            &parameters_key);
-        if (reg_result == EBPF_SUCCESS) {
-            (void)ebpf_read_registry_value_dword(
-                parameters_key,
-                EBPF_PROOF_OF_VERIFICATION_REGISTRY_VALUE,
-                &proof_of_verification_value);
-            ebpf_close_registry_key(parameters_key);
-        }
-        if (proof_of_verification_value == 0) {
+        if (!_ebpf_is_proof_of_verification_required()) {
             // Proof of verification is not set, so we don't verify the signature.
             EBPF_RETURN_RESULT(EBPF_SUCCESS);
         }

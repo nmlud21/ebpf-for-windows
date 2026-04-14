@@ -263,7 +263,7 @@ function Export-BuildArtifactsToVMs
         }
         Write-Log "Unpacked $tempFileName to $VMSystemDrive\eBPF on $VMName"
 
-        # Dump C:\eBPF directory contents for debugging (issue #5090 investigation).
+        # Dump C:\eBPF directory contents for debugging
         Write-Log "Dumping C:\eBPF directory contents on $VMName after export:"
         Invoke-Command -Session $VMSession -ScriptBlock {
             Get-ChildItem -Path "$Env:SystemDrive\eBPF" -Recurse | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 300
