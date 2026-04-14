@@ -3612,28 +3612,27 @@ _set_proof_of_verification(uint32_t enable)
  * @brief Test that validates production-signed native eBPF modules load successfully.
  *
  * This test validates that a production-signed bindmonitor driver can be loaded.
- * It requires that the signed driver exists in C:\eBPF\ (copied from C:\work by Setup.ps1).
+ * It requires that the signed driver exists in the same directory as api_test.exe.
  */
 TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verification]")
 {
     // Select the architecture and build-type appropriate signed driver.
     #if defined(_AMD64_) && defined(_DEBUG)
-        const char* signed_driver_path = "C:\\eBPF\\bindmonitor_x64_debug_signed.sys";
+        const char* signed_driver_name = "bindmonitor_x64_debug_signed.sys";
     #elif defined(_AMD64_)
-        const char* signed_driver_path = "C:\\eBPF\\bindmonitor_x64_signed.sys";
+        const char* signed_driver_name = "bindmonitor_x64_signed.sys";
     #elif defined(_ARM64_) && defined(_DEBUG)
-        const char* signed_driver_path = "C:\\eBPF\\bindmonitor_arm64_debug_signed.sys";
+        const char* signed_driver_name = "bindmonitor_arm64_debug_signed.sys";
     #elif defined(_ARM64_)
-        const char* signed_driver_path = "C:\\eBPF\\bindmonitor_arm64_signed.sys";
+        const char* signed_driver_name = "bindmonitor_arm64_signed.sys";
     #else
     #error "Unsupported architecture"
     #endif
 
-    // This test requires a production-signed driver copied to C:\eBPF by Setup.ps1 on 1ES runners.
-    if (_access(signed_driver_path, 0) != 0) {
-        SKIP("Signed driver not found at " << signed_driver_path << " (only available on 1ES runners)");
+    // The signed driver must be present in the same directory as api_test.exe.
+    if (_access(signed_driver_name, 0) != 0) {
+        SKIP("Signed driver not found: " << signed_driver_name);
     }
-    std::cout << "Found signed driver file: " << signed_driver_path << std::endl;
 
     // Require production signature verification for native module loads.
     _set_proof_of_verification(1);
@@ -3642,9 +3641,9 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
     struct bpf_object* object = nullptr;
     fd_t program_fd;
 
-    // Attempt to load the production-signed driver (use copy_file=false since we're loading from an absolute path).
-    result = program_load_helper(signed_driver_path, BPF_PROG_TYPE_BIND, EBPF_EXECUTION_NATIVE, &object, &program_fd, false);
-    INFO("Failed to load production-signed driver " << signed_driver_path << " (error " << result << ")");
+    // Attempt to load the signed driver.
+    result = program_load_helper(signed_driver_name, BPF_PROG_TYPE_BIND, EBPF_EXECUTION_NATIVE, &object, &program_fd);
+    INFO("Failed to load production-signed driver " << signed_driver_name << " (error " << result << ")");
     REQUIRE(result == 0);
     REQUIRE(program_fd != ebpf_fd_invalid);
 
@@ -3653,8 +3652,8 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
 
     // Restore default behavior (allow test-signed modules) before further assertions.
     _set_proof_of_verification(0);
-    
-    // Verify the program loaded correctly
+
+    // Verify the program loaded correctly.
     uint32_t next_id;
     REQUIRE(bpf_prog_get_next_id(0, &next_id) == 0);
 
@@ -3670,8 +3669,6 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
 
     REQUIRE(program_execution_type == EBPF_EXECUTION_NATIVE);
     _close(query_fd);
-
-    std::cout << "Proof of verification passed for production-signed driver " << signed_driver_path << std::endl;
 }
 
 /**
