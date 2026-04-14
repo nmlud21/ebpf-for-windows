@@ -77,14 +77,14 @@ foreach ($fileName in $signedDriverFiles) {
             Destination = Join-Path -Path $vmDestinationPath -ChildPath $fileName
         }
     } else {
-        Write-Log "Signed binary not found (may not be needed for this configuration): $filePath"
+        Write-Log "Signed binary not found: $filePath"
     }
 }
 
 if ($signedBinariesToCopy.Count -gt 0) {
     Write-Log "Found $($signedBinariesToCopy.Count) signed binary file(s) to copy to VM."
 } else {
-    Write-Log "No signed binaries found in $signedDriversPath."
+    throw "Certain signed binaries not found in $signedDriversPath. Signed drivers are required for proof_of_verification tests."
 }
 
 # Process VM creation and setup.
