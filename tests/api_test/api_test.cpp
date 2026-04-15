@@ -3630,9 +3630,7 @@ TEST_CASE("proof_of_verification_positive", "[native_tests][proof_of_verificatio
     #endif
 
     // The signed driver must be present in the same directory as api_test.exe.
-    if (_access(signed_driver_name, 0) != 0) {
-        SKIP("Signed driver not found: " << signed_driver_name);
-    }
+    REQUIRE(_access(signed_driver_name, 0) == 0);
 
     // Require production signature verification for native module loads.
     _set_proof_of_verification(1);
