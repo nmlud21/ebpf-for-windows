@@ -11,6 +11,7 @@
 #include "common_tests.h"
 #include "ebpf_core_structs.h"
 #include "ebpf_ring_buffer_record.h"
+#include "ebpf_store_helper.h"
 #include "ebpf_structs.h"
 #include "misc_helper.h"
 #include "native_helper.hpp"

@@ -378,7 +378,7 @@ function Invoke-CICDTests
     if ($ExecuteSystemTests) {
         foreach ($Test in $SystemTestList) {
             $TestCommand = "PsExec64.exe"
-            $TestArguments = "-accepteula -nobanner -s -w `"$pwd`" `"$pwd\$($Test.Test) $($Test.Arguments)`" `"-d yes`""
+            $TestArguments = "-accepteula -nobanner -s -w `"$pwd`" `"$pwd\$($Test.Test)`" $($Test.Arguments) `"-d yes`""
             Invoke-Test -TestName $TestCommand -TestArgs $TestArguments -InnerTestName $($Test.Test)  -VerboseLogs $VerboseLogs -TestHangTimeout $($Test.Timeout) -TraceFileName "$($Test.Test)_System"
         }
     }
